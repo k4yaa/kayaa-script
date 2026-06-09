@@ -31,8 +31,12 @@ local ReplicatedStorage = Services.ReplicatedStorage
 local PlaceId, JobId = game.PlaceId, game.JobId
 
 local API_URL = "https://reggae-jolliness-sworn.ngrok-free.dev/api/update"
+local CONFIG_URL = API_URL:gsub("/api/update$", "/api/config")
 
-local API_KEY = getgenv().kayaatrackstat.KEY or "changeme-secret"
+local KAYAA_TRACK_STAT = type(getgenv().kayaatrackstat) == "table" and getgenv().kayaatrackstat or {}
+local DISPLAY_CONFIG = type(KAYAA_TRACK_STAT.DISPLAYS) == "table" and KAYAA_TRACK_STAT.DISPLAYS or {}
+local API_KEY = KAYAA_TRACK_STAT.KEY or getgenv().KEY or "changeme-secret"
+local PC_NAME = DISPLAY_CONFIG.PC or getgenv().PC or "PC-1"
 
 if API_KEY == "changeme-secret" then
 	warn("Wrong Key")
@@ -45,9 +49,80 @@ if game.PlaceId ~= 142823291 and game.PlaceId ~= 335132309 and game.PlaceId ~= 6
 	warn("[RSKD] wrong game:", game.PlaceId)
 	return
 end
+
 local Tracker = {
 	Item = {"HeartWand", "HeartWandChroma"}
 }
+
+local function cleanString(str)
+	str = tostring(str or "")
+	return str:gsub("|", ""):gsub(";", "")
+end
+
+local function getBodyFromUrl(url)
+	if httprequest then
+		local ok, res = pcall(function()
+			return httprequest({
+				Url = url,
+				Method = "GET",
+				Headers = {
+					["ngrok-skip-browser-warning"] = "1",
+					["User-Agent"] = "Roblox"
+				}
+			})
+		end)
+		if ok and res and res.Body then
+			return res.Body
+		end
+	end
+
+	local ok, body = pcall(function()
+		return game:HttpGet(url)
+	end)
+	if ok then return body end
+	return nil
+end
+
+local function loadTrackedItemsFromBackend()
+	local body = getBodyFromUrl(CONFIG_URL)
+	if type(body) ~= "string" or body == "" then return end
+
+	local ok, cfg = pcall(function()
+		return HttpService:JSONDecode(body)
+	end)
+	if not ok or type(cfg) ~= "table" or type(cfg.games) ~= "table" then return end
+
+	for _, gameConfig in ipairs(cfg.games) do
+		if type(gameConfig) == "table" and tostring(gameConfig.id or ""):lower() == "mm2" then
+			local fieldKeys = {}
+			if type(gameConfig.fields) == "table" then
+				for _, field in ipairs(gameConfig.fields) do
+					if type(field) == "table" and type(field.key) == "string" then
+						fieldKeys[field.key] = true
+					end
+				end
+			end
+
+			local nextItems = {}
+			local seen = {}
+			if type(gameConfig.monitors) == "table" then
+				for _, monitor in ipairs(gameConfig.monitors) do
+					if type(monitor) == "table" and type(monitor.key) == "string" and fieldKeys[monitor.key] and not seen[monitor.key] then
+						table.insert(nextItems, monitor.key)
+						seen[monitor.key] = true
+					end
+				end
+			end
+
+			if #nextItems > 0 then
+				Tracker.Item = nextItems
+			end
+			break
+		end
+	end
+end
+
+loadTrackedItemsFromBackend()
 
 local function toRoman(num)
 	if not num or num <= 0 then return "" end
@@ -198,17 +273,47 @@ function Tracker:getLevelData()
 	return prestige, level
 end
 
+local function CheckInventory()
+	local itemAmounts = {}
+	local allItems = {}
+	local categories = {"Weapons", "Pets"}
+
+	for _, itemName in ipairs(Tracker.Item) do
+		itemAmounts[itemName] = 0
+	end
+
+
+	for _, categoryName in ipairs(categories) do
+		local success, result = pcall(function()
+			return ReplicatedStorage.Remotes.Extras.GetData:InvokeServer(categoryName)
+		end)
+
+		if success and result and result.Owned then
+			for name, amount in pairs(result.Owned) do
+				if itemAmounts[name] ~= nil then
+					local count = tonumber(amount) or 0
+					itemAmounts[name] = count
+					if count > 0 then
+						table.insert(allItems, cleanString(name) .. " x" .. tostring(count))
+					end
+				end
+			end
+		end
+	end
+	return itemAmounts, table.concat(allItems, ", ")
+end
 local function snapshot()
-    local trackedItems = {}
+    local itemAmounts, trackedItems = CheckInventory()
 
     local prestige, level = Tracker:getLevelData()
     
-    local finalLevel = tonumber(level)
-    if prestige > 0 then
-        finalLevel = toRoman(prestige) .." ".. finalLevel
+    local finalLevel = tonumber(level) or level
+	local prestigeNumber = tonumber(prestige) or 0
+    if prestigeNumber > 0 then
+        finalLevel = toRoman(prestigeNumber) .. " " .. tostring(finalLevel)
     end
 
-    return {
+    local payload = {
         userId = Client.UserId,
         username = Client.Name,
         session = SESSION_ID,
@@ -216,10 +321,16 @@ local function snapshot()
         level = finalLevel, 
         coin = Tracker:GetCurrency("Coins"),
         items = trackedItems,
-        pc = getgenv().kayaatrackstat.DISPLAYS.PC or "PC-1",
+        pc = PC_NAME,
         game = "MM2",
         ts = os.time(),
     }
+
+	for itemName, amount in pairs(itemAmounts) do
+		payload[itemName] = amount
+	end
+
+	return payload
 end
 
 
@@ -256,13 +367,15 @@ local SCRIPT_URL = "https://pastefy.app/9YPWW2wZ/raw"
 
 local function queueSelf()
 	local code = ([[
+        getgenv().kayaatrackstat = getgenv().kayaatrackstat or {}
+        getgenv().kayaatrackstat.DISPLAYS = getgenv().kayaatrackstat.DISPLAYS or {}
         getgenv().kayaatrackstat.KEY = %q
         getgenv().kayaatrackstat.DISPLAYS.PC = %q
         getgenv().SESSION = %q
         loadstring(game:HttpGet(%q))()
     ]]):format(
-		getgenv().kayaatrackstat.KEY or "",
-		getgenv().kayaatrackstat.DISPLAYS.PC or "PC-1",
+		API_KEY,
+		PC_NAME,
 		SESSION_ID,
 		SCRIPT_URL
 	)
