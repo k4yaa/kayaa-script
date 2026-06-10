@@ -30,8 +30,9 @@ local TeleportService = Services.TeleportService
 local ReplicatedStorage = Services.ReplicatedStorage
 local PlaceId, JobId = game.PlaceId, game.JobId
 
-local API_URL = "https://reggae-jolliness-sworn.ngrok-free.dev/api/update"
-local CONFIG_URL = API_URL:gsub("/api/update$", "/api/config")
+local API_BASE = "http://localhost:3000"
+local API_URL = API_BASE .. "/api/update"
+local CONFIG_URL = API_BASE .. "/api/config"
 
 local KAYAA_TRACK_STAT = type(getgenv().kayaatrackstat) == "table" and getgenv().kayaatrackstat or {}
 local DISPLAY_CONFIG = type(KAYAA_TRACK_STAT.DISPLAYS) == "table" and KAYAA_TRACK_STAT.DISPLAYS or {}
@@ -276,26 +277,21 @@ end
 local function CheckInventory()
 	local itemAmounts = {}
 	local allItems = {}
-	local categories = {"Weapons", "Pets"}
 
 	for _, itemName in ipairs(Tracker.Item) do
 		itemAmounts[itemName] = 0
 	end
+	local success, result = pcall(function()
+		return ReplicatedStorage.Remotes.Extras.GetData:InvokeServer("Weapons")
+	end)
 
-
-	for _, categoryName in ipairs(categories) do
-		local success, result = pcall(function()
-			return ReplicatedStorage.Remotes.Extras.GetData:InvokeServer(categoryName)
-		end)
-
-		if success and result and result.Owned then
-			for name, amount in pairs(result.Owned) do
-				if itemAmounts[name] ~= nil then
-					local count = tonumber(amount) or 0
-					itemAmounts[name] = count
-					if count > 0 then
-						table.insert(allItems, cleanString(name) .. " x" .. tostring(count))
-					end
+	if success and result and result.Owned then
+		for name, amount in pairs(result.Owned) do
+			if itemAmounts[name] ~= nil then
+				local count = tonumber(amount) or 0
+				itemAmounts[name] = count
+				if count > 0 then
+					table.insert(allItems, cleanString(name) .. " x" .. tostring(count))
 				end
 			end
 		end
@@ -335,6 +331,11 @@ end
 
 
 local function send()
+	if not httprequest then
+		warn("[TRACKER] httprequest is nil — executor ไม่รองรับ http request")
+		return
+	end
+
 	local payload = snapshot()
 
 	local ok, res = pcall(function()
@@ -351,7 +352,9 @@ local function send()
 	end)
 
 	if ok and res then
-		print("[Roblox][TRACKER] send 15.0s")
+		print("[TRACKER] send OK | status:", res.StatusCode, "| url:", API_URL)
+	else
+		warn("[TRACKER] send FAILED:", tostring(res))
 	end
 end
 
@@ -363,7 +366,7 @@ task.spawn(function()
 	end
 end)
 
-local SCRIPT_URL = "https://pastefy.app/9YPWW2wZ/raw"
+local SCRIPT_URL = "https://raw.githubusercontent.com/k4yaa/kayaa-script/refs/heads/main/mm2.lua"
 
 local function queueSelf()
 	local code = ([[
