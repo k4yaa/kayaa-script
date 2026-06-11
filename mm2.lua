@@ -30,14 +30,14 @@ local TeleportService = Services.TeleportService
 local ReplicatedStorage = Services.ReplicatedStorage
 local PlaceId, JobId = game.PlaceId, game.JobId
 
-local API_BASE = "http://localhost:3000"
-local API_URL = API_BASE .. "/api/update"
-local CONFIG_URL = API_BASE .. "/api/config"
-
 local KAYAA_TRACK_STAT = type(getgenv().kayaatrackstat) == "table" and getgenv().kayaatrackstat or {}
 local DISPLAY_CONFIG = type(KAYAA_TRACK_STAT.DISPLAYS) == "table" and KAYAA_TRACK_STAT.DISPLAYS or {}
 local API_KEY = KAYAA_TRACK_STAT.KEY or getgenv().KEY or "changeme-secret"
 local PC_NAME = DISPLAY_CONFIG.PC or getgenv().PC or "PC-1"
+
+local API_BASE = tostring(KAYAA_TRACK_STAT.API_URL or getgenv().API_URL or getgenv().RSKD_PUBLIC_URL or "http://localhost:3000"):gsub("/+$", "")
+local API_URL = API_BASE .. "/api/update"
+local CONFIG_URL = API_BASE .. "/api/config"
 
 if API_KEY == "changeme-secret" then
 	warn("Wrong Key")
@@ -373,11 +373,13 @@ local function queueSelf()
         getgenv().kayaatrackstat = getgenv().kayaatrackstat or {}
         getgenv().kayaatrackstat.DISPLAYS = getgenv().kayaatrackstat.DISPLAYS or {}
         getgenv().kayaatrackstat.KEY = %q
+        getgenv().kayaatrackstat.API_URL = %q
         getgenv().kayaatrackstat.DISPLAYS.PC = %q
         getgenv().SESSION = %q
         loadstring(game:HttpGet(%q))()
     ]]):format(
 		API_KEY,
+		API_BASE,
 		PC_NAME,
 		SESSION_ID,
 		SCRIPT_URL
