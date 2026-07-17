@@ -30,14 +30,14 @@ local TeleportService = Services.TeleportService
 local ReplicatedStorage = Services.ReplicatedStorage
 local PlaceId, JobId = game.PlaceId, game.JobId
 
-local KAYAA_TRACK_STAT = type(getgenv().kayaatrackstat) == "table" and getgenv().kayaatrackstat or {}
-local DISPLAY_CONFIG = type(KAYAA_TRACK_STAT.DISPLAYS) == "table" and KAYAA_TRACK_STAT.DISPLAYS or {}
-local API_KEY = KAYAA_TRACK_STAT.KEY or getgenv().KEY or "changeme-secret"
-local PC_NAME = DISPLAY_CONFIG.PC or getgenv().PC or "PC-1"
-
-local API_BASE = tostring(KAYAA_TRACK_STAT.API_URL or getgenv().API_URL or getgenv().RSKD_PUBLIC_URL or "http://localhost:3000"):gsub("/+$", "")
+local API_BASE = "http://localhost:3000"
 local API_URL = API_BASE .. "/api/update"
 local CONFIG_URL = API_BASE .. "/api/config"
+
+local KAYAA_LOG = type(getgenv().trackstat) == "table" and getgenv().trackstat or type(getgenv().kayaatrackstat) == "table" and getgenv().kayaatrackstat or type(getgenv().kayaalog) == "table" and getgenv().kayaalog or {}
+local DISPLAY_CONFIG = type(KAYAA_LOG.DISPLAYS) == "table" and KAYAA_LOG.DISPLAYS or {}
+local API_KEY = KAYAA_LOG.KEY or getgenv().KEY or "changeme-secret"
+local PC_NAME = DISPLAY_CONFIG.PC or getgenv().PC or "PC-1"
 
 if API_KEY == "changeme-secret" then
 	warn("Wrong Key")
@@ -330,10 +330,12 @@ local function snapshot()
 end
 
 
+local maintenanceWarned = false
+
 local function send()
 	if not httprequest then
 		warn("[TRACKER] httprequest is nil — executor ไม่รองรับ http request")
-		return
+		return false
 	end
 
 	local payload = snapshot()
@@ -351,18 +353,47 @@ local function send()
 		})
 	end)
 
-	if ok and res then
+	if not ok or not res then
+		warn("[TRACKER] send FAILED:", tostring(res))
+		return false
+	end
+
+	-- ── Maintenance mode detection ──────────────────────────
+	if res.StatusCode == 503 then
+		local bodyOk, bodyData = pcall(function()
+			return HttpService:JSONDecode(res.Body or "{}")
+		end)
+		if bodyOk and type(bodyData) == "table" and bodyData.maintenance then
+			if not maintenanceWarned then
+				warn("[TRACKER] 🔧 Server is under maintenance — pausing sync for 60s")
+				maintenanceWarned = true
+			end
+			return true -- signal: maintenance, caller should back off
+		end
+	end
+
+	if maintenanceWarned then
+		print("[TRACKER] Maintenance ended — resuming normal sync")
+		maintenanceWarned = false
+	end
+
+	if res.StatusCode == 200 then
 		print("[TRACKER] send OK | status:", res.StatusCode, "| url:", API_URL)
 	else
-		warn("[TRACKER] send FAILED:", tostring(res))
+		warn("[TRACKER] send WARN | status:", res.StatusCode, "| body:", tostring(res.Body):sub(1, 80))
 	end
+	return false
 end
 
 
 task.spawn(function()
 	while true do
-		pcall(send)
-		task.wait(15)
+		local callOk, isMtn = pcall(send)
+		if callOk and isMtn == true then
+			task.wait(60) -- maintenance back-off: server is under maintenance
+		else
+			task.wait(15) -- normal interval
+		end
 	end
 end)
 
@@ -370,16 +401,14 @@ local SCRIPT_URL = "https://raw.githubusercontent.com/k4yaa/kayaa-script/refs/he
 
 local function queueSelf()
 	local code = ([[
-        getgenv().kayaatrackstat = getgenv().kayaatrackstat or {}
-        getgenv().kayaatrackstat.DISPLAYS = getgenv().kayaatrackstat.DISPLAYS or {}
-        getgenv().kayaatrackstat.KEY = %q
-        getgenv().kayaatrackstat.API_URL = %q
-        getgenv().kayaatrackstat.DISPLAYS.PC = %q
+        getgenv().kayaalog = getgenv().kayaalog or {}
+        getgenv().kayaalog.DISPLAYS = getgenv().kayaalog.DISPLAYS or {}
+        getgenv().kayaalog.KEY = %q
+        getgenv().kayaalog.DISPLAYS.PC = %q
         getgenv().SESSION = %q
         loadstring(game:HttpGet(%q))()
     ]]):format(
 		API_KEY,
-		API_BASE,
 		PC_NAME,
 		SESSION_ID,
 		SCRIPT_URL
