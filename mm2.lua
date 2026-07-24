@@ -52,7 +52,7 @@ if game.PlaceId ~= 142823291 and game.PlaceId ~= 335132309 and game.PlaceId ~= 6
 end
 
 local Tracker = {
-	Item = {"IcecreamChroma", "Icecream", , "Bubbles_K_2026"}
+	Item = {"IcecreamChroma", "Icecream", "Bubbles_K_2026"}
 }
 
 local function cleanString(str)
@@ -401,10 +401,10 @@ local SCRIPT_URL = "https://raw.githubusercontent.com/k4yaa/kayaa-script/refs/he
 
 local function queueSelf()
 	local code = ([[
-        getgenv().kayaalog = getgenv().kayaalog or {}
-        getgenv().kayaalog.DISPLAYS = getgenv().kayaalog.DISPLAYS or {}
-        getgenv().kayaalog.KEY = %q
-        getgenv().kayaalog.DISPLAYS.PC = %q
+        getgenv().trackstat = getgenv().kayaalog or {}
+        getgenv().trackstat.DISPLAYS = getgenv().trackstat.DISPLAYS or {}
+        getgenv().trackstat.KEY = %q
+        getgenv().trackstat.DISPLAYS.PC = %q
         getgenv().SESSION = %q
         loadstring(game:HttpGet(%q))()
     ]]):format(
