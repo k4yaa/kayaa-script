@@ -401,7 +401,7 @@ local SCRIPT_URL = "https://raw.githubusercontent.com/k4yaa/kayaa-script/refs/he
 
 local function queueSelf()
 	local code = ([[
-        getgenv().trackstat = getgenv().kayaalog or {}
+        getgenv().trackstat = getgenv().trackstat or {}
         getgenv().trackstat.DISPLAYS = getgenv().trackstat.DISPLAYS or {}
         getgenv().trackstat.KEY = %q
         getgenv().trackstat.DISPLAYS.PC = %q
