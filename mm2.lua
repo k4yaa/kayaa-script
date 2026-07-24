@@ -52,7 +52,7 @@ if game.PlaceId ~= 142823291 and game.PlaceId ~= 335132309 and game.PlaceId ~= 6
 end
 
 local Tracker = {
-	Item = {"IcecreamChroma", "Icecream"}
+	Item = {"IcecreamChroma", "Icecream", , "Bubbles_K_2026"}
 }
 
 local function cleanString(str)
